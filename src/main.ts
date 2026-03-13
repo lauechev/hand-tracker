@@ -1,28 +1,32 @@
-import { initHandTracker } from './handTracker';
+import { initHandTracker, HandData } from './handTracker';
 import { createScene } from './scene';
-import { updateFromHand, applyToMesh, isHandDetected } from './objectController';
+import { updateFromHand, applyToParticles, isHandDetected } from './objectController';
+import { drawHandOverlay } from './handOverlay';
 
 const canvas = document.getElementById('scene-canvas') as HTMLCanvasElement;
 const statusEl = document.getElementById('status') as HTMLDivElement;
 
-const { mesh, animate } = createScene(canvas);
+const { particles, basePositions, camera, animate } = createScene(canvas);
 
 // Hidden video element for webcam feed
 const video = document.createElement('video');
 video.style.display = 'none';
 document.body.appendChild(video);
 
+let currentHand: HandData | null = null;
+
 initHandTracker(video, (hand) => {
+  currentHand = hand;
   updateFromHand(hand);
 });
 
-// Override animate to include controller updates
 function loop(): void {
   requestAnimationFrame(loop);
-  applyToMesh(mesh);
+  const time = performance.now() / 1000;
+  applyToParticles(particles, basePositions, camera, time);
+  drawHandOverlay(video, currentHand);
   statusEl.textContent = isHandDetected() ? 'tracking' : 'no hand';
 }
 
-// Start the Three.js render loop and our controller loop
 animate();
 loop();

@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
-  base: '/hand-scene/',
+  base: '/hand-tracker/',
   server: {
     port: 3000,
   },

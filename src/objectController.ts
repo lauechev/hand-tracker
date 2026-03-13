@@ -1,57 +1,62 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import type { HandData } from './handTracker';
 
-const LERP_FACTOR = 0.08;
-const IDLE_SPEED = 0.005;
+const VIBRATE_AMOUNT = 0.015;
+const ZOOM_LERP = 0.06;
+const MIN_ZOOM = 1.5;
+const MAX_ZOOM = 8;
 
-let targetX = 0;
-let targetY = 0;
-let targetRotX = 0;
-let targetRotY = 0;
 let handDetected = false;
-let idleAngle = 0;
+let pinchDistance = 1; // normalised 0-1ish
+let targetZoom = 5; // camera z
 
-function lerp(current: number, target: number, factor: number): number {
-  return current + (target - current) * factor;
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
 }
 
 export function updateFromHand(hand: HandData | null): void {
   if (hand) {
     handDetected = true;
-    const wrist = hand.landmarks[0];
-    const middleTip = hand.landmarks[12];
+    const thumb = hand.landmarks[4];
+    const index = hand.landmarks[8];
 
-    // Mirror X so movement feels natural, map to world range [-2, 2]
-    const normalizedX = 1 - wrist.x;
-    targetX = (normalizedX - 0.5) * 4;
-    targetY = (0.5 - wrist.y) * 4;
+    // Euclidean distance between thumb tip and index tip
+    const dx = thumb.x - index.x;
+    const dy = thumb.y - index.y;
+    const dz = thumb.z - index.z;
+    pinchDistance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-    // Angle from wrist to middle fingertip drives rotation
-    const dx = middleTip.x - wrist.x;
-    const dy = middleTip.y - wrist.y;
-    targetRotY = dx * Math.PI * 2;
-    targetRotX = dy * Math.PI * 2;
+    // Map pinch to zoom: pinch = zoom out, open hand = zoom in
+    // Typical range ~0.03 (pinched) to ~0.25 (open)
+    const normalized = Math.min(Math.max((pinchDistance - 0.03) / 0.22, 0), 1);
+    targetZoom = MAX_ZOOM - normalized * (MAX_ZOOM - MIN_ZOOM);
   } else {
     handDetected = false;
+    targetZoom = 5;
   }
 }
 
-export function applyToMesh(mesh: THREE.Mesh): void {
-  if (handDetected) {
-    mesh.position.x = lerp(mesh.position.x, targetX, LERP_FACTOR);
-    mesh.position.y = lerp(mesh.position.y, targetY, LERP_FACTOR);
-    mesh.rotation.x = lerp(mesh.rotation.x, targetRotX, LERP_FACTOR);
-    mesh.rotation.y = lerp(mesh.rotation.y, targetRotY, LERP_FACTOR);
-  } else {
-    // Slowly return to center
-    mesh.position.x = lerp(mesh.position.x, 0, LERP_FACTOR * 0.5);
-    mesh.position.y = lerp(mesh.position.y, 0, LERP_FACTOR * 0.5);
+export function applyToParticles(
+  particles: THREE.Points,
+  basePositions: Float32Array,
+  camera: THREE.PerspectiveCamera,
+  time: number
+): void {
+  // Vibrate particles
+  const posAttr = particles.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const pos = posAttr.array as Float32Array;
 
-    // Idle rotation
-    idleAngle += IDLE_SPEED;
-    mesh.rotation.x = lerp(mesh.rotation.x, Math.sin(idleAngle) * 0.3, LERP_FACTOR);
-    mesh.rotation.y = lerp(mesh.rotation.y, idleAngle, LERP_FACTOR);
+  for (let i = 0; i < pos.length; i += 3) {
+    // Each particle gets a unique phase from its base position
+    const phase = basePositions[i] * 31.7 + basePositions[i + 1] * 17.3 + basePositions[i + 2] * 23.1;
+    pos[i] = basePositions[i] + Math.sin(time * 3 + phase) * VIBRATE_AMOUNT;
+    pos[i + 1] = basePositions[i + 1] + Math.cos(time * 2.7 + phase * 1.3) * VIBRATE_AMOUNT;
+    pos[i + 2] = basePositions[i + 2] + Math.sin(time * 3.3 + phase * 0.7) * VIBRATE_AMOUNT;
   }
+  posAttr.needsUpdate = true;
+
+  // Smooth zoom
+  camera.position.z = lerp(camera.position.z, targetZoom, ZOOM_LERP);
 }
 
 export function isHandDetected(): boolean {

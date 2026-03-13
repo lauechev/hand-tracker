@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 
+const PARTICLE_COUNT = 800;
+
 export interface SceneContext {
-  mesh: THREE.Mesh;
+  particles: THREE.Points;
+  basePositions: Float32Array;
+  camera: THREE.PerspectiveCamera;
   animate: () => void;
 }
 
@@ -16,26 +20,56 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.z = 5;
 
-  const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
-  scene.add(ambientLight);
+  // Particle geometry — clustered like cells
+  const geometry = new THREE.BufferGeometry();
+  const positions = new Float32Array(PARTICLE_COUNT * 3);
+  const basePositions = new Float32Array(PARTICLE_COUNT * 3);
 
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
-  directionalLight.position.set(3, 4, 5);
-  scene.add(directionalLight);
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const i3 = i * 3;
+    // Distribute in a loose sphere
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const r = 1.2 * Math.cbrt(Math.random()); // cube root for even volume distribution
+    positions[i3] = r * Math.sin(phi) * Math.cos(theta);
+    positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    positions[i3 + 2] = r * Math.cos(phi);
+    basePositions[i3] = positions[i3];
+    basePositions[i3 + 1] = positions[i3 + 1];
+    basePositions[i3 + 2] = positions[i3 + 2];
+  }
 
-  const pointLight = new THREE.PointLight(0x30cac0, 1, 20);
-  pointLight.position.set(-2, 2, 3);
-  scene.add(pointLight);
+  // Assign random colors from palette
+  const palette = [
+    new THREE.Color(0x00a1de), // blue
+    new THREE.Color(0xb152c9), // purple
+    new THREE.Color(0xffd55d), // yellow
+    new THREE.Color(0xff712d), // orange
+    new THREE.Color(0xed5e99), // pink
+    new THREE.Color(0x34c059), // green
+    new THREE.Color(0xa90c23), // red
+  ];
+  const colors = new Float32Array(PARTICLE_COUNT * 3);
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const c = palette[Math.floor(Math.random() * palette.length)];
+    colors[i * 3] = c.r;
+    colors[i * 3 + 1] = c.g;
+    colors[i * 3 + 2] = c.b;
+  }
 
-  const geometry = new THREE.IcosahedronGeometry(0.8, 1);
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x30cac0,
-    roughness: 0.3,
-    metalness: 0.6,
-    wireframe: false,
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  const material = new THREE.PointsMaterial({
+    size: 0.035,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.85,
+    vertexColors: true,
   });
-  const mesh = new THREE.Mesh(geometry, material);
-  scene.add(mesh);
+
+  const particles = new THREE.Points(geometry, material);
+  scene.add(particles);
 
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -48,5 +82,5 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     renderer.render(scene, camera);
   }
 
-  return { mesh, animate };
+  return { particles, basePositions, camera, animate };
 }
