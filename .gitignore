@@ -1,0 +1,25 @@
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+publico
+dist
+dist-ssr
+*.local
+
+# IMPORTANTE: Variables de entorno con credenciales sensibles
+.env
+.env.local
+.env.*.local
+
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
